@@ -1,5 +1,5 @@
-#ifndef SCHEDULER_H_
-#define SCHEDULER_H_
+#ifndef DELAYWORKER_H_
+#define DELAYWORKER_H_
 
 #include <iostream>
 #include <memory>
@@ -12,10 +12,10 @@ namespace cpputil
 {
 constexpr uint8_t NUM_TASKS_DEFAULT = 3;
 
-class Scheduler {
+class DelayWorker {
 public:
-  Scheduler();
-  ~Scheduler();
+  DelayWorker();
+  ~DelayWorker();
   int8_t Add(const std::function<void()>& cb, uint8_t delay_sec);
   void Cancel(uint8_t index);
 
@@ -43,4 +43,4 @@ private:
   std::array<Task, NUM_TASKS_DEFAULT> taskList_;
 };
 } // namespace cpputil
-#endif // SCHEDULER_H_
+#endif // DELAYWORKER_H_
