@@ -39,19 +39,23 @@ private:
 };
 
 CommandWorker::CommandWorker() {
+  runnable = true;
   worker = std::thread(&CommandWorker::Run, this);
 }
 
 CommandWorker::~CommandWorker() {
+  cv.notify_one();
+  runnable = false;
   worker.join();
 }
-
 
 uint32_t CommandWorker::Add(const std::function<void()>& commandfunc) {
   std::unique_lock<std::mutex> lk(m);
   offset_++;
   Task t {offset_, commandfunc};
   tasks_.emplace_back(t);
+  cv.notify_one();
+
   return offset_;
 }
 
@@ -59,6 +63,7 @@ uint32_t CommandWorker::Add(const std::function<void()>& commandfunc, uint32_t i
   std::unique_lock<std::mutex> lk(m);
   Task t {id, commandfunc};
   tasks_.emplace_back(t);
+  cv.notify_one();
   return id;
 }
 
@@ -96,8 +101,11 @@ void CommandWorker::Run() {
   LOG("");
   while (runnable) {
     std::unique_lock<std::mutex> lk(m);
-    while (tasks_.empty()) {
+    while (runnable && tasks_.empty()) {
       cv.wait(lk);
+    }
+    if (!runnable) {
+      break;
     }
     decltype(tasks_)::iterator taskit = tasks_.begin();
     std::function<void()> command = taskit->command;
@@ -110,6 +118,8 @@ void CommandWorker::Run() {
 }
 
 void CommandWorker::DelayCallback(const std::function<void()> commandfunc, uint32_t id) {
+  LOG("");
+  delaytasks_.pop_front();
   Add(commandfunc, id);
 }
 
