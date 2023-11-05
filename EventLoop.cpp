@@ -15,11 +15,13 @@ EventLoop::~EventLoop() {
   runnable_ = false;
 
   timed_queue_.m.lock();
+  timed_queue_.q.clear();
   timed_queue_.cv.notify_one();
   timed_queue_.m.unlock();
   timed_queue_thread_.join();
 
   event_queue_.m.lock();
+  event_queue_.q.clear();
   event_queue_.cv.notify_one();
   event_queue_.m.unlock();
   event_queue_thread_.join();
@@ -27,12 +29,14 @@ EventLoop::~EventLoop() {
 
 
 uint32_t EventLoop::IdleAdd(const EventFunc& func, const std::string& tag) {
-  std::unique_lock<std::mutex> lk(event_queue_.m);
-  const uint32_t id = ++event_queue_.offset;
-  const EventSource source {id, tag, func};
-  event_queue_.q.push_back(source);
-  event_queue_.cv.notify_one();
-
+  uint32_t id;
+  {
+    std::lock_guard<std::mutex> lock(event_queue_.m);
+    id = ++event_queue_.offset;
+    const EventSource source {id, tag, func};
+    event_queue_.q.push_back(source);
+    event_queue_.cv.notify_one();
+  }
   return id;
 }
 
@@ -68,6 +72,69 @@ uint32_t EventLoop::TimedAdd(const EventFunc& func, const std::chrono::steady_cl
   return 0;
 }
 
+void EventLoop::RemoveByID(uint32_t id) {
+  bool found = false;
+  {
+    std::lock_guard<std::mutex> lock(timed_queue_.m);
+    auto it = timed_queue_.q.begin();
+    while (it != timed_queue_.q.end()) {
+      if (it->id == id) {
+        timed_queue_.q.erase(it);
+        // if it is waiting (i.e. head), awake the dispatcher to wait next event.
+        if (it == timed_queue_.q.begin()) {
+          timed_queue_.cv.notify_one();
+        }
+        found = true;
+        break;
+      }
+      it++;
+    }
+  }
+  
+  if (!found) {
+    std::lock_guard<std::mutex> lock(event_queue_.m);
+    auto it = event_queue_.q.begin();
+    while (it != event_queue_.q.end()) {
+      if (it->id == id) {
+        event_queue_.q.erase(it);
+        break;
+      }
+      it++;
+    }
+  }
+}
+
+void EventLoop::RemoveByTag(const std::string& tag) {
+  bool found = false;
+  {
+    std::lock_guard<std::mutex> lock(timed_queue_.m);
+    auto it = timed_queue_.q.begin();
+    while (it != timed_queue_.q.end()) {
+      if (it->tag == tag) {
+        timed_queue_.q.erase(it);
+        // if it is waiting (i.e. head), awake the dispatcher to wait next event.
+        if (it == timed_queue_.q.begin()) {
+          timed_queue_.cv.notify_one();
+        }
+        found = true;
+        break;
+      }
+      it++;
+    }
+  }
+  
+  if (!found) {
+    std::lock_guard<std::mutex> lock(event_queue_.m);
+    auto it = event_queue_.q.begin();
+    while (it != event_queue_.q.end()) {
+      if (it->tag == tag) {
+        event_queue_.q.erase(it);
+        break;
+      }
+      it++;
+    }
+  }
+}
 
 void EventLoop::EventDispatcher() {
   while (runnable_) {

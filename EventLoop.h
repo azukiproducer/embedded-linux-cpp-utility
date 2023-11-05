@@ -8,7 +8,6 @@
  * @todo  1. スレッドプールによるスレッドの再利用を検討する。スレッドの起動終了にコストがかかる環境のため。
  *        2. スレッドの遅延起動について検討する。コンストラクタ実行時は、パフォーマンスに限りのあるシステム起動時であることが多い。
  *           システム起動時に使わないスレッドを起動するのは避けたい。イベントをキューに積むときに起動するのが良さそう。
- *        3. イベントの削除を実装する。
  */
 
 #ifndef THREADUTIL_EVENTLOOP_H
@@ -82,6 +81,9 @@ public:
    * @return イベントIDを返す。イベントをキューから削除するための検索キーに使用する。
   */
   uint32_t TimedAdd(const EventFunc& func, const std::chrono::steady_clock::time_point period, const std::string& tag = std::string());
+
+  void RemoveByID(uint32_t id);
+  void RemoveByTag(const std::string& tag);
 
 private:
   void EventDispatcher();

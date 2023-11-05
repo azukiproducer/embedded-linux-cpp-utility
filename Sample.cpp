@@ -25,19 +25,44 @@ using namespace std::chrono;
 
 uint8_t TaskA(int32_t arg1, int32_t arg2) {
   std::printf("%s arg1=%d arg2=%d\n", LOG_HEADER.c_str(), arg1, arg2);
+  return EVENT_ONESHOT;
+}
+
+uint8_t TaskB(int32_t arg1, int32_t arg2) {
+  std::printf("%s arg1=%d arg2=%d\n", LOG_HEADER.c_str(), arg1, arg2);
   std::this_thread::sleep_for(std::chrono::seconds(1));
   return EVENT_ONESHOT;
 }
+
 
 int main(void) {
   std::printf("%s enter\n", LOG_HEADER.c_str());
   EventLoop ev;
 
-  steady_clock::time_point tp = steady_clock::now() + seconds(3);
-  ev.TimedAdd( std::bind(&TaskA, 10, 10), tp + seconds(1), "tag1");
-  ev.TimedAdd( std::bind(&TaskA, 20, 20), tp + seconds(4), "tag2");
-  ev.TimedAdd( std::bind(&TaskA, 30, 30), tp + seconds(2), "tag3");
+  // event is fired after 1 second.
+  steady_clock::time_point tp = steady_clock::now();
+  ev.TimedAdd( std::bind(&TaskA, 1, 10), tp + seconds(1), "tag1");
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  
+  // multiple events are sorted by time. second queued event is fired first.
+  tp = steady_clock::now();
+  ev.TimedAdd( std::bind(&TaskA, 2, 20), tp + seconds(2), "tag2");
+  ev.TimedAdd( std::bind(&TaskA, 3, 30), tp + seconds(1), "tag3");
+  std::this_thread::sleep_for(std::chrono::seconds(3));
 
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  // event is removed.
+  tp = steady_clock::now();
+  ev.TimedAdd( std::bind(&TaskA, 4, 40), tp + seconds(1), "tag4");
+  ev.RemoveByTag("tag4");
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+
+  // already running event is not removed.
+  ev.IdleAdd( std::bind(&TaskB, 5, 50), "tag5");
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  ev.IdleAdd( std::bind(&TaskB, 6, 60), "tag6");
+  ev.RemoveByTag("tag5");
+  ev.RemoveByTag("tag6");
+  std::this_thread::sleep_for(std::chrono::seconds(3));
+
   return 0;
 }
